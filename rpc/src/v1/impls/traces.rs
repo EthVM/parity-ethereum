@@ -28,7 +28,7 @@ use v1::Metadata;
 use v1::traits::Traces;
 use v1::helpers::{errors, fake_sign};
 use v1::types::{TraceFilter, LocalizedTrace, BlockNumber, Index, CallRequest, Bytes, TraceResults,
-	TraceResultsWithTransactionHash, TraceOptions, block_number_to_id};
+				TraceResultsWithTransactionHash, TraceOptions, block_number_to_id};
 
 fn to_call_analytics(flags: TraceOptions) -> CallAnalytics {
 	CallAnalytics {
@@ -73,6 +73,33 @@ impl<C, S> Traces for TracesClient<C> where
 			.map(|traces| traces.into_iter().map(LocalizedTrace::from).collect()))
 	}
 
+	fn blocks_traces(&self, _from: BlockNumber, _to: BlockNumber) -> Result<Vec<LocalizedTrace>> {
+
+		let mut results: Vec<LocalizedTrace> = Vec::new();
+
+		match (_from, _to) {
+			(BlockNumber::Num(a), BlockNumber::Num(b)) => {
+				info!(target: "import", "Getting traces by number: {} until {}", a, b);
+
+				for _number in a..=b {
+					info!(target: "import", "Fetching traces number {}", _number);
+
+					let block_id = BlockId::Number(_number.clone());
+
+					match self.client.block_traces(block_id) {
+						Some(traces) => for trace in traces {
+							results.push(LocalizedTrace::from(trace))
+						},
+						_ => (),    // do nothing
+					};
+				}
+			}
+			_ => ()
+		}
+
+		Ok(results)
+	}
+
 	fn transaction_traces(&self, transaction_hash: H256) -> Result<Option<Vec<LocalizedTrace>>> {
 		Ok(self.client.transaction_traces(TransactionId::Hash(transaction_hash.into()))
 			.map(|traces| traces.into_iter().map(LocalizedTrace::from).collect()))
@@ -81,7 +108,7 @@ impl<C, S> Traces for TracesClient<C> where
 	fn trace(&self, transaction_hash: H256, address: Vec<Index>) -> Result<Option<LocalizedTrace>> {
 		let id = TraceId {
 			transaction: TransactionId::Hash(transaction_hash.into()),
-			address: address.into_iter().map(|i| i.value()).collect()
+			address: address.into_iter().map(|i| i.value()).collect(),
 		};
 
 		Ok(self.client.trace(id)

@@ -301,6 +301,14 @@ where
 		Box::new(self.rich_block(num.to_block_id(), include_txs).map(Some))
 	}
 
+	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber, _include_txs: bool) -> BoxFuture<Vec<RichBlock>> {
+		Box::new(future::err(errors::unimplemented(None)))
+	}
+
+	fn uncles_by_number(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<RichBlock>> {
+		Box::new(future::err(errors::unimplemented(None)))
+	}
+
 	fn transaction_count(&self, address: H160, num: Option<BlockNumber>) -> BoxFuture<U256> {
 		Box::new(self.fetcher().account(address, num.unwrap_or_default().to_block_id(), self.transaction_queue.clone())
 			.map(|acc| acc.map_or(0.into(), |a| a.nonce)))

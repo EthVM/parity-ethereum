@@ -44,6 +44,10 @@ pub trait Traces {
 	#[rpc(name = "trace_block")]
 	fn block_traces(&self, BlockNumber) -> Result<Option<Vec<LocalizedTrace>>>;
 
+	/// Returns all traces produced at given block.
+	#[rpc(name = "trace_blocks")]
+	fn blocks_traces(&self, BlockNumber, BlockNumber) -> Result<Vec<LocalizedTrace>>;
+
 	/// Executes the given call and returns a number of possible traces for it.
 	#[rpc(name = "trace_call")]
 	fn call(&self, CallRequest, TraceOptions, Option<BlockNumber>) -> Result<TraceResults>;

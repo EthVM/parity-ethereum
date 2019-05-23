@@ -200,6 +200,12 @@ pub trait Parity {
 	#[rpc(name = "parity_getBlockReceipts")]
 	fn block_receipts(&self, Option<BlockNumber>) -> BoxFuture<Vec<Receipt>>;
 
+	/// Get block receipts.
+	/// Allows you to fetch receipts from the entire block at once.
+	/// If no parameter is provided defaults to `latest`.
+	#[rpc(name = "parity_getBlocksReceipts")]
+	fn blocks_receipts(&self, BlockNumber, BlockNumber) -> BoxFuture<Vec<Receipt>>;
+
 	/// Get IPFS CIDv0 given protobuf encoded bytes.
 	#[rpc(name = "parity_cidV0")]
 	fn ipfs_cid(&self, Bytes) -> Result<String>;

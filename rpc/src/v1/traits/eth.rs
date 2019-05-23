@@ -86,6 +86,14 @@ pub trait Eth {
 	#[rpc(name = "eth_getBlockByNumber")]
 	fn block_by_number(&self, BlockNumber, bool) -> BoxFuture<Option<RichBlock>>;
 
+	/// Returns blocks with given number.
+	#[rpc(name = "eth_getBlocksByNumber")]
+	fn blocks_by_number(&self, BlockNumber, BlockNumber, bool) -> BoxFuture<Vec<RichBlock>>;
+
+	/// Returns blocks with given number.
+	#[rpc(name = "eth_getUnclesByNumber")]
+	fn uncles_by_number(&self, BlockNumber, BlockNumber) -> BoxFuture<Vec<RichBlock>>;
+
 	/// Returns the number of transactions sent from given address at given time (block number).
 	#[rpc(name = "eth_getTransactionCount")]
 	fn transaction_count(&self, H160, Option<BlockNumber>) -> BoxFuture<U256>;

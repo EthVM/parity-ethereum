@@ -366,6 +366,10 @@ where
 		Box::new(self.fetcher().receipts(id).and_then(|receipts| Ok(receipts.into_iter().map(Into::into).collect())))
 	}
 
+	fn blocks_receipts(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<Receipt>> {
+		Box::new(future::empty())
+	}
+
 	fn ipfs_cid(&self, content: Bytes) -> Result<String> {
 		ipfs::cid(content)
 	}
