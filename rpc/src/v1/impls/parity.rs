@@ -403,43 +403,6 @@ impl<C, M, U, S> Parity for ParityClient<C, M, U> where
 		Box::new(future::ok(receipts.into_iter().map(Into::into).collect()))
 	}
 
-	fn blocks_receipts(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<Receipt>> {
-
-		let mut results = Vec::new();
-
-		match (_from, _to) {
-			(BlockNumber::Num(a), BlockNumber::Num(b)) => {
-
-				info!(target: "import", "Getting receipts by number: {} until {}", a, b);
-
-				for _number in a..=b {
-
-					info!(target: "import", "Fetching block receipt {}", _number);
-
-					let block_id = BlockId::Number(_number.clone());
-
-					match self.client.localized_block_receipts(block_id) {
-						Some(receipts) => {
-							info!(target: "import", "Block receipts successfully fetched");
-							let receipts_copy: Vec<Receipt> = receipts.into_iter().map(Into::into).collect();
-							for receipt in receipts_copy {
-								results.push(receipt)
-							}
-						},
-						_ => {
-							info!(target: "import", "Failed to fetch block receipts!")
-						},
-					}
-				}
-
-			},
-			_ => ()
-		}
-
-		Box::new(future::done(Ok(results)))
-
-	}
-
 	fn ipfs_cid(&self, content: Bytes) -> Result<String> {
 		ipfs::cid(content)
 	}

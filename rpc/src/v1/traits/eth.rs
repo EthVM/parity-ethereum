@@ -19,7 +19,7 @@ use jsonrpc_core::{Result, BoxFuture};
 use jsonrpc_derive::rpc;
 use ethereum_types::{H64, H160, H256, U64, U256};
 
-use v1::types::{RichBlock, BlockNumber, Bytes, CallRequest, Filter, FilterChanges, Index, EthAccount};
+use v1::types::{RichBlock, BlockNumber, Bytes, CallRequest, Filter, FilterChanges, Index, EthAccount, FullBlock};
 use v1::types::{Log, Receipt, SyncStatus, Transaction, Work};
 
 /// Eth rpc interface.
@@ -87,12 +87,8 @@ pub trait Eth {
 	fn block_by_number(&self, BlockNumber, bool) -> BoxFuture<Option<RichBlock>>;
 
 	/// Returns blocks with given number.
-	#[rpc(name = "eth_getBlocksByNumber")]
-	fn blocks_by_number(&self, BlockNumber, BlockNumber, bool) -> BoxFuture<Vec<RichBlock>>;
-
-	/// Returns blocks with given number.
-	#[rpc(name = "eth_getUnclesByNumber")]
-	fn uncles_by_number(&self, BlockNumber, BlockNumber) -> BoxFuture<Vec<RichBlock>>;
+	#[rpc(name = "ethvm_getBlocksByNumber")]
+	fn blocks_by_number(&self, BlockNumber, BlockNumber) -> BoxFuture<Vec<FullBlock>>;
 
 	/// Returns the number of transactions sent from given address at given time (block number).
 	#[rpc(name = "eth_getTransactionCount")]

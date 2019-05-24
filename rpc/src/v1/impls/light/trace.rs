@@ -67,7 +67,4 @@ impl Traces for TracesClient {
 		Err(errors::light_unimplemented(None))
 	}
 
-	fn blocks_traces(&self, _: BlockNumber, _: BlockNumber) -> Result<Vec<LocalizedTrace>> {
-		Err(errors::light_unimplemented(None))
-	}
 }

@@ -42,10 +42,7 @@ use v1::helpers::{errors, limit_logs, SyncPollFilter, PollManager};
 use v1::helpers::deprecated::{self, DeprecationNotice};
 use v1::helpers::light_fetch::{self, LightFetch};
 use v1::traits::Eth;
-use v1::types::{
-	RichBlock, Block, BlockTransactions, BlockNumber, LightBlockNumber, Bytes, SyncStatus as RpcSyncStatus,
-	SyncInfo as RpcSyncInfo, Transaction, CallRequest, Index, Filter, Log, Receipt, Work, EthAccount
-};
+use v1::types::{RichBlock, Block, BlockTransactions, BlockNumber, LightBlockNumber, Bytes, SyncStatus as RpcSyncStatus, SyncInfo as RpcSyncInfo, Transaction, CallRequest, Index, Filter, Log, Receipt, Work, EthAccount, FullBlock};
 use v1::metadata::Metadata;
 
 use sync::{LightSyncInfo, LightSyncProvider, LightNetworkDispatcher, ManageNetwork};
@@ -301,11 +298,7 @@ where
 		Box::new(self.rich_block(num.to_block_id(), include_txs).map(Some))
 	}
 
-	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber, _include_txs: bool) -> BoxFuture<Vec<RichBlock>> {
-		Box::new(future::err(errors::unimplemented(None)))
-	}
-
-	fn uncles_by_number(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<RichBlock>> {
+	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<FullBlock>> {
 		Box::new(future::err(errors::unimplemented(None)))
 	}
 

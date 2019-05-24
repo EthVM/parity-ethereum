@@ -21,7 +21,7 @@ use ethereum_types::{H160, H256, U256, Bloom as H2048};
 use serde::ser::Error;
 use serde::{Serialize, Serializer};
 use types::encoded::Header as EthHeader;
-use v1::types::{Bytes, Transaction};
+use v1::types::{Bytes, Transaction, Receipt, LocalizedTrace};
 
 /// Block Transactions
 #[derive(Debug)]
@@ -200,6 +200,20 @@ impl<T: Serialize> Serialize for Rich<T> {
 			Err(S::Error::custom("Unserializable structures: expected objects"))
 		}
 	}
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FullBlock {
+
+	pub block: RichBlock,
+
+	pub receipts: Vec<Receipt>,
+
+	pub traces: Vec<LocalizedTrace>,
+
+	pub uncles: Vec<RichBlock>
+
 }
 
 #[cfg(test)]

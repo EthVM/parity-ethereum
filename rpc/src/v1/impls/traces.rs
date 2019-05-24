@@ -73,33 +73,6 @@ impl<C, S> Traces for TracesClient<C> where
 			.map(|traces| traces.into_iter().map(LocalizedTrace::from).collect()))
 	}
 
-	fn blocks_traces(&self, _from: BlockNumber, _to: BlockNumber) -> Result<Vec<LocalizedTrace>> {
-
-		let mut results: Vec<LocalizedTrace> = Vec::new();
-
-		match (_from, _to) {
-			(BlockNumber::Num(a), BlockNumber::Num(b)) => {
-				info!(target: "import", "Getting traces by number: {} until {}", a, b);
-
-				for _number in a..=b {
-					info!(target: "import", "Fetching traces number {}", _number);
-
-					let block_id = BlockId::Number(_number.clone());
-
-					match self.client.block_traces(block_id) {
-						Some(traces) => for trace in traces {
-							results.push(LocalizedTrace::from(trace))
-						},
-						_ => (),    // do nothing
-					};
-				}
-			}
-			_ => ()
-		}
-
-		Ok(results)
-	}
-
 	fn transaction_traces(&self, transaction_hash: H256) -> Result<Option<Vec<LocalizedTrace>>> {
 		Ok(self.client.transaction_traces(TransactionId::Hash(transaction_hash.into()))
 			.map(|traces| traces.into_iter().map(LocalizedTrace::from).collect()))

@@ -44,11 +44,7 @@ use v1::helpers::deprecated::{self, DeprecationNotice};
 use v1::helpers::dispatch::{FullDispatcher, default_gas_price};
 use v1::helpers::block_import::is_major_importing;
 use v1::traits::Eth;
-use v1::types::{
-	RichBlock, Block, BlockTransactions, BlockNumber, Bytes, SyncStatus, SyncInfo,
-	Transaction, CallRequest, Index, Filter, Log, Receipt, Work, EthAccount, StorageProof,
-	block_number_to_id,
-};
+use v1::types::{RichBlock, Block, BlockTransactions, BlockNumber, Bytes, SyncStatus, SyncInfo, Transaction, CallRequest, Index, Filter, Log, Receipt, Work, EthAccount, StorageProof, block_number_to_id, FullBlock, LocalizedTrace};
 use v1::metadata::Metadata;
 
 const EXTRA_INFO_PROOF: &str = "Object exists in blockchain (fetched earlier), extra_info is always available if object exists; qed";
@@ -197,6 +193,97 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> EthClient<C, SN, S
 			seed_compute: Mutex::new(SeedHashCompute::default()),
 			options: options,
 			deprecation_notice: Default::default(),
+		}
+	}
+
+	fn full_block(&self, id: BlockNumberOrId) -> Result<Option<FullBlock>> {
+		let client = &self.client;
+
+		let client_query = |id| {
+			let block = client.block(id);
+
+			let uncles_count = client.block(id).map(|b| b.uncles_count().into());
+
+			let uncles = match uncles_count {
+				Some(count) => {
+					let mut uncles = Vec::new();
+
+					for position in 0..count {
+						let uncle_id = PendingUncleId { id: PendingOrBlock::Block(id), position };
+
+						match self.uncle(uncle_id.into()) {
+							Ok(Some(uncle)) => uncles.push(uncle),
+							_ => (),    // do nothing
+						}
+					}
+
+					Some(uncles)
+				}
+				_ => None
+			};
+
+			(block.clone(), client.block_total_difficulty(id), uncles, client.localized_block_receipts(id), client.block_traces(id), client.block_extra_info(id))
+		};
+
+		let (block, difficulty, uncles, receipts, traces, extra_info) = match id {
+			BlockNumberOrId::Number(num) => {
+				let id = match num {
+					BlockNumber::Latest => Some(BlockId::Latest),
+					BlockNumber::Earliest => Some(BlockId::Earliest),
+					BlockNumber::Num(n) => Some(BlockId::Number(n)),
+					BlockNumber::Pending => None
+				};
+
+				match id {
+					Some(id) => client_query(id),
+					None => (None, None, None, None, None, None)
+				}
+			}
+
+			BlockNumberOrId::Id(id) => client_query(id),
+		};
+
+		match (block, difficulty, uncles, receipts, traces, extra_info) {
+			(Some(block), Some(total_difficulty), Some(uncles), Some(localized_receipts), Some(traces), extra) => {
+				let header_view = block.header_view();
+
+				let transactions: Vec<Transaction> = block.view().localized_transactions().into_iter().map(|t| Transaction::from_localized(t)).collect();
+
+				let receipts: Vec<Receipt> = localized_receipts.into_iter().map(Into::into).collect();
+
+				Ok(Some(FullBlock {
+					block: RichBlock {
+						inner: Block {
+							hash: Some(header_view.hash().into()),
+							size: Some(block.rlp().as_raw().len().into()),
+							parent_hash: header_view.parent_hash().into(),
+							uncles_hash: header_view.uncles_hash().into(),
+							author: header_view.author().into(),
+							miner: header_view.author().into(),
+							state_root: header_view.state_root().into(),
+							transactions_root: header_view.transactions_root().into(),
+							receipts_root: header_view.receipts_root().into(),
+							number: Some(header_view.number().into()),
+							gas_used: header_view.gas_used().into(),
+							gas_limit: header_view.gas_limit().into(),
+							logs_bloom: Some(header_view.log_bloom().into()),
+							timestamp: header_view.timestamp().into(),
+							difficulty: header_view.difficulty().into(),
+							total_difficulty: Some(total_difficulty.into()),
+							seal_fields: header_view.seal().into_iter().map(Into::into).collect(),
+							uncles: block.uncle_hashes().into_iter().map(Into::into).collect(),
+							transactions: BlockTransactions::Full(transactions),
+							extra_data: Bytes::new(header_view.extra_data()),
+						},
+						extra_info: extra.expect(EXTRA_INFO_PROOF)
+					},
+					receipts,
+					traces: traces.into_iter().map(LocalizedTrace::from).collect(),
+					uncles,
+				}))
+			}
+
+			_ => Ok(None)
 		}
 	}
 
@@ -743,74 +830,21 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> Eth for EthClient<
 		Box::new(future::done(result))
 	}
 
-	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber, _include_txs: bool) -> BoxFuture<Vec<RichBlock>> {
-
-		let mut results: Vec<RichBlock> = Vec::new();
+	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<FullBlock>> {
+		let mut results: Vec<FullBlock> = Vec::new();
 
 		match (_from, _to) {
 			(BlockNumber::Num(a), BlockNumber::Num(b)) => {
-
-				info!(target: "import", "Getting blocks by number: {} until {}", a, b);
-
 				for _number in a..=b {
-
-					info!(target: "import", "Fetching block number {}", _number);
-
-					match self.rich_block(BlockNumber::Num(_number.clone()).into(), _include_txs.into()) {
+					match self.full_block(BlockNumber::Num(_number.clone()).into()) {
 						Ok(Some(block)) => {
-							info!(target: "import", "Block successfully fetched");
 							results.push(block);
-						},
-						_ => {
-							info!(target: "import", "Failed to fetch block!")
-						},
-					}
-				}
-
-			},
-			_ => ()
-		}
-
-		Box::new(future::done(Ok(results)))
-	}
-
-	fn uncles_by_number(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<RichBlock>> {
-
-		let mut results: Vec<RichBlock> = Vec::new();
-
-		match (_from, _to) {
-			(BlockNumber::Num(a), BlockNumber::Num(b)) => {
-
-				info!(target: "import", "Getting uncles by number: {} until {}", a, b);
-
-				for _number in a..=b {
-
-					info!(target: "import", "Fetching uncles for number {}", _number);
-
-					let block_id = BlockId::Number(_number.clone());
-
-					let uncles_count = match self.client.block(block_id)
-						.map(|block| block.uncles_count().into()) {
-						Some(count) => count,
-						_ => 0
-					};
-
-					for _idx in 0..uncles_count {
-						let uncle_id = PendingUncleId { id: PendingOrBlock::Block(block_id), position: _idx };
-						match self.uncle(uncle_id.into()) {
-							Ok(Some(uncle)) => {
-								info!(target: "import", "Uncle successfully fetched");
-								results.push(uncle);
-							},
-							_ => {
-								info!(target: "import", "Failed to fetch uncle!")
-							},
 						}
+						_ => (),    // do nothing
 					}
-
 				}
+			}
 
-			},
 			_ => ()
 		}
 
