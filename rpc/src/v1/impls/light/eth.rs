@@ -298,7 +298,7 @@ where
 		Box::new(self.rich_block(num.to_block_id(), include_txs).map(Some))
 	}
 
-	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<FullBlock>> {
+	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber, _max_trace_count: usize) -> BoxFuture<Vec<FullBlock>> {
 		Box::new(future::err(errors::unimplemented(None)))
 	}
 

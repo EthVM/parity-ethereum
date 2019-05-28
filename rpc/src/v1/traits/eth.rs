@@ -88,7 +88,7 @@ pub trait Eth {
 
 	/// Returns blocks with given number.
 	#[rpc(name = "ethvm_getBlocksByNumber")]
-	fn blocks_by_number(&self, BlockNumber, BlockNumber) -> BoxFuture<Vec<FullBlock>>;
+	fn blocks_by_number(&self, BlockNumber, BlockNumber, usize) -> BoxFuture<Vec<FullBlock>>;
 
 	/// Returns the number of transactions sent from given address at given time (block number).
 	#[rpc(name = "eth_getTransactionCount")]

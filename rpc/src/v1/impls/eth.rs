@@ -18,7 +18,7 @@
 
 use std::thread;
 use std::time::{Instant, Duration, SystemTime, UNIX_EPOCH};
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 use rlp::Rlp;
 use ethereum_types::{Address, H64, H160, H256, U64, U256};
@@ -46,6 +46,8 @@ use v1::helpers::block_import::is_major_importing;
 use v1::traits::Eth;
 use v1::types::{RichBlock, Block, BlockTransactions, BlockNumber, Bytes, SyncStatus, SyncInfo, Transaction, CallRequest, Index, Filter, Log, Receipt, Work, EthAccount, StorageProof, block_number_to_id, FullBlock, LocalizedTrace};
 use v1::metadata::Metadata;
+use std::collections::BTreeMap;
+use itertools::Itertools;
 
 const EXTRA_INFO_PROOF: &str = "Object exists in blockchain (fetched earlier), extra_info is always available if object exists; qed";
 
@@ -830,19 +832,28 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> Eth for EthClient<
 		Box::new(future::done(result))
 	}
 
-	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber) -> BoxFuture<Vec<FullBlock>> {
+	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber, _max_trace_count: usize) -> BoxFuture<Vec<FullBlock>> {
+
 		let mut results: Vec<FullBlock> = Vec::new();
+		let mut trace_count = 0;
 
 		match (_from, _to) {
-			(BlockNumber::Num(a), BlockNumber::Num(b)) => {
-				for _number in a..=b {
+			(BlockNumber::Num(first), BlockNumber::Num(last)) => {
+
+				for _number in first..=last {
 					match self.full_block(BlockNumber::Num(_number.clone()).into()) {
 						Ok(Some(block)) => {
+							trace_count += block.traces.len();
 							results.push(block);
+
+							if trace_count > _max_trace_count {
+								break
+							}
 						}
 						_ => (),    // do nothing
 					}
 				}
+
 			}
 
 			_ => ()
