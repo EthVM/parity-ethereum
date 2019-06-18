@@ -246,12 +246,15 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> EthClient<C, SN, S
 		};
 
 		match (block, difficulty, uncles, receipts, traces, extra_info) {
-			(Some(block), Some(total_difficulty), Some(uncles), Some(localized_receipts), Some(traces), extra) => {
+			(Some(block), Some(total_difficulty), Some(uncles), receipts_opt, Some(traces), extra) => {
 				let header_view = block.header_view();
 
 				let transactions: Vec<Transaction> = block.view().localized_transactions().into_iter().map(|t| Transaction::from_localized(t)).collect();
 
-				let receipts: Vec<Receipt> = localized_receipts.into_iter().map(Into::into).collect();
+				let receipts = match receipts_opt {
+					Some(localized_receipts) => localized_receipts.into_iter().map(Into::into).collect(),
+					None => Vec::new()
+				};
 
 				Ok(Some(FullBlock {
 					block: RichBlock {
@@ -285,7 +288,10 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> EthClient<C, SN, S
 				}))
 			}
 
-			_ => Ok(None)
+			(block_opt, diff_opt, uncles_opt, receipts_opt, traces_opt, extra_opt) => {
+				info!("Failed to load. Block = {}, diff = {}, uncles = {}, receipts = {}, traces = {}, extra = {}", block_opt.is_some(), diff_opt.is_some(), uncles_opt.is_some(), receipts_opt.is_some(), traces_opt.is_some(),extra_opt.is_some());
+				Ok(None)
+			}
 		}
 	}
 
@@ -840,7 +846,12 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> Eth for EthClient<
 		match (_from, _to) {
 			(BlockNumber::Num(first), BlockNumber::Num(last)) => {
 
+				info!("Blocks by number: {} to {}", first, last);
+
 				for _number in first..=last {
+
+					info!("Getting block: {}", _number);
+
 					match self.full_block(BlockNumber::Num(_number.clone()).into()) {
 						Ok(Some(block)) => {
 							trace_count += block.traces.len();
