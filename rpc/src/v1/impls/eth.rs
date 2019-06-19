@@ -846,11 +846,7 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> Eth for EthClient<
 		match (_from, _to) {
 			(BlockNumber::Num(first), BlockNumber::Num(last)) => {
 
-				info!("Blocks by number: {} to {}", first, last);
-
 				for _number in first..=last {
-
-					info!("Getting block: {}", _number);
 
 					match self.full_block(BlockNumber::Num(_number.clone()).into()) {
 						Ok(Some(block)) => {
