@@ -21,7 +21,7 @@ use ethereum_types::{H160, H256, U256, Bloom as H2048};
 use serde::ser::Error;
 use serde::{Serialize, Serializer};
 use types::encoded::Header as EthHeader;
-use v1::types::{Bytes, Transaction, Receipt, LocalizedTrace};
+use v1::types::{Bytes, Transaction, Receipt, LocalizedTrace, TraceResultsWithTransactionHash};
 
 /// Block Transactions
 #[derive(Debug)]
@@ -210,7 +210,9 @@ pub struct FullBlock {
 
 	pub receipts: Vec<Receipt>,
 
-	pub traces: Vec<LocalizedTrace>,
+	pub tx_traces: Vec<TraceResultsWithTransactionHash>,
+
+	pub block_traces: Vec<LocalizedTrace>,
 
 	pub uncles: Vec<RichBlock>
 

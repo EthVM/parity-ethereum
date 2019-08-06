@@ -25,9 +25,10 @@ use ethereum_types::{Address, H64, H160, H256, U64, U256};
 use parking_lot::Mutex;
 
 use ethash::{self, SeedHashCompute};
-use ethcore::client::{BlockChainClient, BlockId, TransactionId, UncleId, StateOrBlock, StateClient, StateInfo, Call, EngineInfo, ProvingBlockChainClient};
+use ethcore::client::{BlockChainClient, BlockId, TransactionId, UncleId, StateOrBlock, StateClient, StateInfo, Call, EngineInfo, ProvingBlockChainClient, CallAnalytics};
 use ethcore::miner::{self, MinerService};
 use ethcore::snapshot::SnapshotService;
+use ethcore::executed::CallError;
 use hash::keccak;
 use miner::external::ExternalMinerService;
 use sync::SyncProvider;
@@ -44,10 +45,11 @@ use v1::helpers::deprecated::{self, DeprecationNotice};
 use v1::helpers::dispatch::{FullDispatcher, default_gas_price};
 use v1::helpers::block_import::is_major_importing;
 use v1::traits::Eth;
-use v1::types::{RichBlock, Block, BlockTransactions, BlockNumber, Bytes, SyncStatus, SyncInfo, Transaction, CallRequest, Index, Filter, Log, Receipt, Work, EthAccount, StorageProof, block_number_to_id, FullBlock, LocalizedTrace};
+use v1::types::{RichBlock, Block, BlockTransactions, BlockNumber, Bytes, SyncStatus, SyncInfo, Transaction, CallRequest, Index, Filter, Log, Receipt, Work, EthAccount, StorageProof, block_number_to_id, FullBlock, LocalizedTrace, TraceResultsWithTransactionHash};
 use v1::metadata::Metadata;
 use std::collections::BTreeMap;
 use itertools::Itertools;
+use ethcore::trace::trace::Action::Reward;
 
 const EXTRA_INFO_PROOF: &str = "Object exists in blockchain (fetched earlier), extra_info is always available if object exists; qed";
 
@@ -224,10 +226,16 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> EthClient<C, SN, S
 				_ => None
 			};
 
-			(block.clone(), client.block_total_difficulty(id), uncles, client.localized_block_receipts(id), client.block_traces(id), client.block_extra_info(id))
+			let analytics_flags = CallAnalytics {
+				transaction_tracing: true,
+				vm_tracing: false,
+				state_diffing: true,
+			};
+
+			(block.clone(), client.block_total_difficulty(id), uncles, client.localized_block_receipts(id), client.block_traces(id), client.replay_block_transactions(id, analytics_flags), client.block_extra_info(id))
 		};
 
-		let (block, difficulty, uncles, receipts, traces, extra_info) = match id {
+		let (block, difficulty, uncles, receipts, block_traces, tx_traces, extra_info) = match id {
 			BlockNumberOrId::Number(num) => {
 				let id = match num {
 					BlockNumber::Latest => Some(BlockId::Latest),
@@ -238,15 +246,15 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> EthClient<C, SN, S
 
 				match id {
 					Some(id) => client_query(id),
-					None => (None, None, None, None, None, None)
+					None => (None, None, None, None, None, Err(CallError::TransactionNotFound), None)
 				}
 			}
 
 			BlockNumberOrId::Id(id) => client_query(id),
 		};
 
-		match (block, difficulty, uncles, receipts, traces, extra_info) {
-			(Some(block), Some(total_difficulty), Some(uncles), receipts_opt, Some(traces), extra) => {
+		match (block, difficulty, uncles, receipts, block_traces, tx_traces, extra_info) {
+			(Some(block), Some(total_difficulty), Some(uncles), receipts_opt, Some(block_traces), Ok(tx_traces), extra) => {
 				let header_view = block.header_view();
 
 				let transactions: Vec<Transaction> = block.view().localized_transactions().into_iter().map(|t| Transaction::from_localized(t)).collect();
@@ -280,16 +288,22 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> EthClient<C, SN, S
 							transactions: BlockTransactions::Full(transactions),
 							extra_data: Bytes::new(header_view.extra_data()),
 						},
-						extra_info: extra.expect(EXTRA_INFO_PROOF)
+						extra_info: extra.expect(EXTRA_INFO_PROOF),
 					},
 					receipts,
-					traces: traces.into_iter().map(LocalizedTrace::from).collect(),
+					block_traces: block_traces.into_iter()
+						// we only want block level traces e.g. uncle or block rewards
+						.filter(|t| match &t.action {
+							Reward(r) => true,
+							_ => false
+						}).map(LocalizedTrace::from).collect(),
+					tx_traces: tx_traces.into_iter().map(TraceResultsWithTransactionHash::from).collect(),
 					uncles,
 				}))
 			}
 
-			(block_opt, diff_opt, uncles_opt, receipts_opt, traces_opt, extra_opt) => {
-				info!("Failed to load. Block = {}, diff = {}, uncles = {}, receipts = {}, traces = {}, extra = {}", block_opt.is_some(), diff_opt.is_some(), uncles_opt.is_some(), receipts_opt.is_some(), traces_opt.is_some(),extra_opt.is_some());
+			(block_opt, diff_opt, uncles_opt, receipts_opt, block_traces_result, tx_traces_result, extra_opt) => {
+				info!("Failed to load. Block = {}, diff = {}, uncles = {}, receipts = {}, block_traces = {}, tx_traces = {}, extra = {}", block_opt.is_some(), diff_opt.is_some(), uncles_opt.is_some(), receipts_opt.is_some(), block_traces_result.is_some(), tx_traces_result.is_ok(), extra_opt.is_some());
 				Ok(None)
 			}
 		}
@@ -839,28 +853,24 @@ impl<C, SN: ?Sized, S: ?Sized, M, EM, T: StateInfo + 'static> Eth for EthClient<
 	}
 
 	fn blocks_by_number(&self, _from: BlockNumber, _to: BlockNumber, _max_trace_count: usize) -> BoxFuture<Vec<FullBlock>> {
-
 		let mut results: Vec<FullBlock> = Vec::new();
 		let mut trace_count = 0;
 
 		match (_from, _to) {
 			(BlockNumber::Num(first), BlockNumber::Num(last)) => {
-
 				for _number in first..=last {
-
 					match self.full_block(BlockNumber::Num(_number.clone()).into()) {
 						Ok(Some(block)) => {
-							trace_count += block.traces.len();
+							trace_count += block.tx_traces.len();
 							results.push(block);
 
 							if trace_count > _max_trace_count {
-								break
+								break;
 							}
 						}
 						_ => (),    // do nothing
 					}
 				}
-
 			}
 
 			_ => ()
